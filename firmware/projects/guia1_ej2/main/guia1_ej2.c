@@ -17,7 +17,11 @@
  *
  * |   Date	    | Description                                    |
  * |:----------:|:-----------------------------------------------|
+<<<<<<< HEAD
  * | 11/03/2026 | Document creation		                         |
+=======
+ * | 11/03/2024 | Document creation		                         |
+>>>>>>> a68d57d (Ejecucion guia1_ej2. Y configuracion en PC de escritorio. USB1 el puerto usado. ACMO)
  *
  * @author Lucas Gonzalez (lucas.gonzalez@ingenieria.uner.edu.ar)
  *
