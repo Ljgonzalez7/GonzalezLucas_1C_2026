@@ -17,7 +17,7 @@
  *
  * |   Date	    | Description                                    |
  * |:----------:|:-----------------------------------------------|
- * | 31/07/2024 | Document creation		                         |
+ * | 11/03/2026 | Document creation		                         |
  *
  * @author Lucas Gonzalez (lucas.gonzalez@ingenieria.uner.edu.ar)
  *
@@ -32,7 +32,7 @@
 #include "led.h"
 #include "switch.h"
 /*==================[macros and definitions]=================================*/
-#define CONFIG_BLINK_PERIOD 500
+#define CONFIG_BLINK_PERIOD 1000
 /*==================[internal data definition]===============================*/
 
 /*==================[internal functions declaration]=========================*/
@@ -51,11 +51,9 @@ void app_main(void){
     		case SWITCH_2:
     			LedToggle(LED_2);
     		break;
-			case (SWITCH_1| SWITCH_2):
+			case (SWITCH_1 | SWITCH_2):
 				LedToggle(LED_3);
 			break;
     	}
-	    LedToggle(LED_3);
-		vTaskDelay(CONFIG_BLINK_PERIOD / portTICK_PERIOD_MS);
 	}
 }

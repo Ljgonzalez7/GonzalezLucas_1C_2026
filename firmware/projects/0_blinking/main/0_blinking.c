@@ -5,7 +5,7 @@
  * This example makes LED_1 blink.
  *
  * @section changelog Changelog
- *
+ * 
  * |   Date	    | Description                                    |
  * |:----------:|:-----------------------------------------------|
  * | 12/09/2023 | Document creation		                         |
@@ -30,7 +30,7 @@
 void app_main(void){
     LedsInit();
     while(true){
-        printf("LED ON\n");
+        printf("LED ON\n"); 
         LedOn(LED_1);
         vTaskDelay(CONFIG_BLINK_PERIOD / portTICK_PERIOD_MS);
         printf("LED OFF\n");
