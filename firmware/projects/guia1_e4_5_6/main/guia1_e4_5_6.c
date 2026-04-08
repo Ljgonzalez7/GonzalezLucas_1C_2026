@@ -76,11 +76,11 @@ void app_main(void){
 	
 	gpioConf_t vector[]=
 	{
-		[GPIO_20,GPIO_OUTPUT];
-		[GPIO_21,GPIO_OUTPUT];
-		[GPIO_22,GPIO_OUTPUT];
-		[GPIO_23,GPIO_OUTPUT];
-	}
+		{GPIO_20,GPIO_OUTPUT},
+		{GPIO_21,GPIO_OUTPUT},
+		{GPIO_22,GPIO_OUTPUT},
+		{GPIO_23,GPIO_OUTPUT}
+	};
 
 	for (int i=0; i<cantidad_digitos; i++)
 	{
@@ -88,7 +88,7 @@ void app_main(void){
 	}
 	
 
-	cambio_estado_gpio(arreglo1[0],vector);
+	cambio_estado_gpio(arreglo1[0],*vector);
 
 }
 /*==================[end of file]============================================*/
