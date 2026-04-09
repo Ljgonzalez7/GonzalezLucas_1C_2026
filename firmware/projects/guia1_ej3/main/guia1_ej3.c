@@ -1,17 +1,18 @@
-/*! @mainpage guia1_ejercicio3
- *
+/*! @mainpage Guia 1 - Ej3:
+ * 
  * @section genDesc General Description
  *
- * This section describes how the program works.
+ * Funcion recibe un puntero led y controla el comportamiento de los mismos
+ * según la combinación de botones. 
  *
- * <a href="https://drive.google.com/...">Operation Example</a>
  *
  * @section hardConn Hardware Connection
  *
- * |    Peripheral  |   ESP32   	|
+ * |    Peripheral  |   ESP32       |
  * |:--------------:|:--------------|
- * | 	PIN_X	 	| 	GPIO_X		|
- *
+ * |      LED 1     |    GPIO_11    |
+ * |      LED 2     |    GPIO_12    |
+ * |      LED 3     |    GPIO_13    |
  *
  * @section changelog Changelog
  *
@@ -32,11 +33,27 @@
 #include "led.h"
 #include "switch.h"
 /*==================[macros and definitions]=================================*/
+/** @def CONFIG_BLINK_PERIOD 
+ * @brief periodo de parpadeo del led.
+ */
 #define CONFIG_BLINK_PERIOD 100
+/** @def ON 
+ * @brief Estado de encendido led, valor 1.
+ */
 #define ON 1
+/** @def OFF 
+ * @brief Estado de apagado led, valor 0.
+ */
 #define OFF 0
+/** @def TOGGLE 
+ * @brief Estado de parpadeo led, valor 2.
+ */
 #define TOGGLE 2
+
 /*==================[internal data definition]===============================*/
+/** *@struct leds
+ * @brief Estructura que contiene la configuración de comportamiento de un LED.
+ */
 struct leds
 {
 	uint8_t mode;
@@ -46,6 +63,11 @@ struct leds
 } my_leds, my_leds2, my_leds3;
 
 /*==================[internal functions declaration]=========================*/
+/** @fn void funcion_leds(struct *leds)
+ * @brief Controla el estado de un LED según los parámetros de la estructura recibida.
+ * * @param leds Puntero a la estructura de tipo leds que contiene la configuración.
+ */
+
 void funcion_leds(struct leds *leds){
 	switch (leds->mode){
 		case ON:
@@ -97,6 +119,9 @@ void funcion_leds(struct leds *leds){
 }
 
 /*==================[external functions definition]==========================*/
+/**
+ * @brief Función principal de la aplicación.
+ */
 
 void app_main(void){
 	LedsInit();
@@ -120,59 +145,4 @@ void app_main(void){
 
 }
 
-/*==================[internal functions declaration]=========================*/
-//void funcion_con_puntero(struct my_leds *puntero_led){
-//	if (puntero_led->mode==ON){
-//		if(puntero_led->n_led==1){
-//			LedOn(LED_1);
-//		}
-//			LedOn(LED_2);
-//		}
-//		else if(puntero_led->n_led==3){
-//			LedOn(LED_3);
-//		}
-//	}
-//	else if(puntero_led->mode==OFF){
-//		if(puntero_led->n_led==1){
-//			LedOff(LED_1);
-//		}
-//		else if(puntero_led->n_led==2){
-//			LedOff(LED_2);
-//		}
-//		else if(puntero_led->n_led==3){
-//			LedOff(LED_3);
-//		}
-//	}
-//	else if(puntero_led->mode==TOGGLE){
-
-//		for(int i=0;i<puntero_led->n_ciclos;i++){
-//			if(puntero_led->n_led==1){
-//					LedToggle(LED_1);
-//				}
-//				else if(puntero_led->n_led==2){
-//					LedToggle(LED_2);
-//				}
-//				else if(puntero_led->n_led==3){
-//					LedToggle(LED_3);
-//				}
-//			for (int j=0;j<(puntero_led->periodo/CONFIG_BLINK_PERIOD);j++){
-
-//				vTaskDelay(CONFIG_BLINK_PERIOD/portTICK_PERIOD_MS);
-
-//			}
-//		}	
-//	}
-//}
-/*==================[external functions definition]==========================*/
-//void app_main(void){
-//LedsInit();
-
-//my_leds.mode=TOGGLE;
-//my_leds.n_ciclos=10;
-//my_leds.n_led=1;
-//my_leds.periodo=500;
-
-//funcion_con_puntero(&my_leds);
-	
-//}
 /*==================[end of file]============================================*/

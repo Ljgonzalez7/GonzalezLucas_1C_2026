@@ -1,12 +1,12 @@
-/*! @mainpage guia1_ejercicio2
- *
+/*! @mainpage Guia1 - Ej2:
+ * Modificación de proyecto blinking_switch.
+
  * @section genDesc General Description
  *
- * This section describes how the program works.
+ * Programa para que parpadeen leds según los botones pulsados.
  *
- * <a href="https://drive.google.com/...">Operation Example</a>
  *
- * @section hardConn Hardware Connection
+ * @section hardConn Hardware Connection 
  *
  * |    Peripheral  |   ESP32   	|
  * |:--------------:|:--------------|
@@ -17,11 +17,7 @@
  *
  * |   Date	    | Description                                    |
  * |:----------:|:-----------------------------------------------|
-<<<<<<< HEAD
  * | 11/03/2026 | Document creation		                         |
-=======
- * | 11/03/2024 | Document creation		                         |
->>>>>>> a68d57d (Ejecucion guia1_ej2. Y configuracion en PC de escritorio. USB1 el puerto usado. ACMO)
  *
  * @author Lucas Gonzalez (lucas.gonzalez@ingenieria.uner.edu.ar)
  *
@@ -35,8 +31,12 @@
 #include "freertos/task.h"
 #include "led.h"
 #include "switch.h"
+
 /*==================[macros and definitions]=================================*/
-#define CONFIG_BLINK_PERIOD 1000
+/** @def CONFIG_BLINK_PERIOD 
+ * @brief periodo de parpadeo del led.
+ */
+#define CONFIG_BLINK_PERIOD 1000 
 /*==================[internal data definition]===============================*/
 
 /*==================[internal functions declaration]=========================*/
