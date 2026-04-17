@@ -59,56 +59,89 @@
 /** @def leds_task_handle 
  * @brief Definicion que indica el orden de prioridad en el prosecamiento de tareas.
  */
-TaskHandle_t led1_task_handle = NULL;
+//TaskHandle_t led1_task_handle = NULL; PARA CUANDO USEMOS TAREAS
+/** @def medir 
+ * @brief variable booleana filtro de medir o parar medición.
+ */
 bool medir = true;
+
+/** @def hold 
+ * @brief variable booleana filtro para mantener dato en pantalla LCD.
+ */
 bool hold = false;
 
 
 static gpio_t echo_st, trigger_st; /**<  Inicializacion del pin*/
 
 /*==================[internal functions declaration]=========================*/
-void ActualizarLEDS(){
-		HcSr04Init(echo_st, trigger_st);
-		uint16_t distancia = HcSr04ReadDistanceInCentimeters();
-		Medicion();
-        
-		while(MEDIR==true)
-		{
-				if(distancia < rango1)
-							{
-								printf("APAGAR TODOS LOS LEDS\n");
-								LedOff(LED_1);
-								LedOff(LED_2);
-								LedOff(LED_3);
-
-							}
-				else if (rango2<distancia<rango3)
-				{
-					printf("PRENDER 1 Y 2 LEDS\n");
-					LedOn(LED_1);
-					LedOn(LED_2);
-				}
-				else if(distancia>rango3)
-				{
-					printf("PRENDER TODOS LOS LEDS\n");
-					LedOn(LED_1);
-					LedOn(LED_2);
-					LedOn(LED_3);
-
-				}
-		}
-		
-	vTaskDelay(CONFIG_BLINK_PERIOD_LEDS / portTICK_PERIOD_MS);
-
+/** @fn void actualizarLeds(uint16_t distancia)
+* @brief Función que cambia el estado de los leds según distancia medida.
+ * * @param distancia valor de distancia medido en cm.
+ */
+void actualizarLeds(uint16_t distancia) {
+    if (distancia < rango1) {
+        LedOff(LED_1); 
+		LedOff(LED_2); 
+		LedOff(LED_3);
+    } 
+    else if (distancia >= rango1 && distancia < rango2) {
+        LedOn(LED_1); 
+		LedOff(LED_2); 
+		LedOff(LED_3);
+    } 
+    else if (distancia >= rango2 && distancia < rango3) {
+        LedOn(LED_1); 
+		LedOn(LED_2); 
+		LedOff(LED_3);
+    } 
+    else {
+        LedOn(LED_1); 
+		LedOn(LED_2); 
+		LedOn(LED_3);
     }
+}
 
+/** @fn void leerTeclas(bool *medir, bool *hold)
+ * @brief Función que acciona según lectura de teclas.
+ * * @param medir puntero a direccion de memoria de variable booleana medir.
+ * * @param hold puntero a direccion de memoria de variable booleana hold.
+ */
 
-void Medicion(){
-    while(true){
-		if(TEC1==1){
-			MEDIR!=MEDIR;
-		}
-		}
+void leerTeclas(bool *medir, bool *hold) {
+    uint8_t teclas = SwitchesRead();
+    if (teclas & SWITCH_1) {
+        *medir = !(*medir);
+        // vTaskDelay(100 / portTICK_PERIOD_MS); // Antirebote simple
+    }
+    if (teclas & SWITCH_2) {
+        *hold = !(*hold);
+    }
+}
+
+/** @fn void appSensorDistancia()
+ * @brief Función que integra el programa de sensado, interacción y mostrado por pantalla.
+ */
+
+void appSensorDistancia() {
+    while (1) {
+        leerTeclas(&medir, &hold); 
+
+        if (medir) {
+            uint16_t distancia = HcSr04ReadDistanceInCentimeters();
+            actualizarLeds(distancia);
+
+            if (!hold) {
+                LcdItsE0803Write(distancia);
+            }
+        } else {
+            LcdItsE0803Off();
+            LedOff(LED_1); 
+			LedOff(LED_2); 
+			LedOff(LED_3);
+        }
+
+        vTaskDelay(CONFIG_BLINK_PERIOD_LEDS/ portTICK_PERIOD_MS);
+    }
 }
 
 
@@ -117,8 +150,12 @@ void app_main(void){
 	printf("Inicializacion\n");
 	LedsInit();
 	LcdItsE0803Init();
-	LcdItsE0803Write(distancia)
-
+	SwitchesInit();
+	HcSr04Init(GPIO_3, GPIO_2); 
 	
+	printf("Ejecucion de programa\n");
+
+	appSensorDistancia();
+
 }
 /*==================[end of file]============================================*/
