@@ -16,6 +16,11 @@
  * |    Digito Uni  |    GPIO_9     |
  * |    Digito Dec  |    GPIO_18    |
  * |    Digito Cen  |    GPIO_19    |
+ * |    GND         |    GND        |
+ * |    ECHO        |    GPIO_3     |
+ * |    TRIGGER     |    GPIO_2     |
+ * |    5V          |    5V         |
+
 
 
  *
@@ -36,6 +41,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "led.h"
+#include "switch.h"
 #include "gpio_mcu.h"
 #include "hc_sr04.h"
 #include "lcditse0803.h"
@@ -70,16 +76,13 @@ bool medir = true;
  */
 bool hold = false;
 
-
-static gpio_t echo_st, trigger_st; /**<  Inicializacion del pin*/
-
 /*==================[internal functions declaration]=========================*/
 /** @fn void actualizarLeds(uint16_t distancia)
 * @brief Función que cambia el estado de los leds según distancia medida.
  * * @param distancia valor de distancia medido en cm.
  */
 void actualizarLeds(uint16_t distancia) {
-    if (distancia < rango1) {
+	if (distancia < rango1) {
         LedOff(LED_1); 
 		LedOff(LED_2); 
 		LedOff(LED_3);
@@ -99,6 +102,7 @@ void actualizarLeds(uint16_t distancia) {
 		LedOn(LED_2); 
 		LedOn(LED_3);
     }
+	
 }
 
 /** @fn void leerTeclas(bool *medir, bool *hold)
@@ -118,17 +122,18 @@ void leerTeclas(bool *medir, bool *hold) {
     }
 }
 
-/** @fn void appSensorDistancia()
- * @brief Función que integra el programa de sensado, interacción y mostrado por pantalla.
+/** @fn void TareaSensorDistancia(void *pvParameter)
+ * @brief Tarea que integra el programa de sensado, interacción y mostrado por pantalla.
  */
 
-void appSensorDistancia() {
-    while (1) {
+void TareaSensorDistancia(void *pvParameter) {    
+	while (1) {
         leerTeclas(&medir, &hold); 
 
         if (medir) {
             uint16_t distancia = HcSr04ReadDistanceInCentimeters();
             actualizarLeds(distancia);
+			printf("Distancia detectada: %d cm\n", distancia); 
 
             if (!hold) {
                 LcdItsE0803Write(distancia);
@@ -154,8 +159,6 @@ void app_main(void){
 	HcSr04Init(GPIO_3, GPIO_2); 
 	
 	printf("Ejecucion de programa\n");
-
-	appSensorDistancia();
-
+	xTaskCreate(&TareaSensorDistancia, "SensorDist", 2048, NULL, 5, NULL);
 }
 /*==================[end of file]============================================*/
