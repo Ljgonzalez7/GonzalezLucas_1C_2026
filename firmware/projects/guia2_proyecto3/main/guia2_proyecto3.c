@@ -1,8 +1,9 @@
-/*! @mainpage Guia 2 - Proyecto 1:
+/*! @mainpage Guia 2 - Proyecto 3:
  * Descripcion
  * @section genDesc General Description
  *
- 
+ * Edicion del proyecto 2, empleo de UART puerto serie para ver por monitor la medición
+ * del sensor de ultrasonido.
  *
  *
  * @section hardConn Hardware Connection
@@ -28,7 +29,7 @@
  *
  * |   Date	    | Description                                    |
  * |:----------:|:-----------------------------------------------|
- * | 15/04/2026 | Document creation		                         |
+ * | 06/05/2026 | Document creation		                         |
  *
  * @author Lucas Gonzalez (lucas.gonzalez@ingenieria.uner.edu.ar)
  *
@@ -58,14 +59,14 @@
 /** @def timer_tarea_1US
  * @brief Variable que controla el timer de la tarea 1 (lectura de teclas) [us]
  */
-#define timer_tarea_1US 1000000
+#define TIMER_TAREA_1US 1000000
 
 /** @def rangos 
  * @brief configuracion de umbrales de medición.
  */
-#define rango1 10
-#define rango2 20
-#define rango3 30
+#define RANGO1 10
+#define RANGO2 20
+#define RANGO3 30
 #define BAUD_RATE 9600
 
 /*==================[internal data definition]===============================*/
@@ -85,29 +86,13 @@ TaskHandle_t TareaSensorDistancia_task_handle = NULL;
 /** @def medir 
  * @brief variable booleana filtro de medir o parar medición.
  */
-bool medir = true;
+volatile bool medir = true;
 
 /** @def hold 
  * @brief variable booleana filtro para mantener dato en pantalla LCD.
  */
-bool hold = false;
-/**
- * @brief List of UART ports available in ESP-EDU
- */
-typedef enum uart_ports{
-	UART_PC,				/*!< UART connected PC through USB port (indicated with UART) (also maped to TX: GPIO16, RX: GPIO17) */
-	UART_CONNECTOR,			/*!< UART connected to J2 connector (TX: GPIO18, RX: GPIO19) */
-} uart_mcu_port_t;
+volatile bool hold = false;
 
-/**
- * @brief Serial port configuration struct
- */
-typedef struct {			
-	uart_mcu_port_t port;	/*!< port */
-	uint32_t baud_rate;		/*!< baudrate (bits per second) */
-	void *func_p;			/*!< Pointer to callback function to call when receiving data (= UART_NO_INT if not requiered)*/
-	void *param_p;			/*!< Pointer to callback function parameters */
-} serial_config_t;
 
 /** @def distancia 
  * @brief variable para almacenar la distancia de la medición.
@@ -121,17 +106,17 @@ uint16_t distancia = 0;
  * * @param distancia valor de distancia medido en cm.
  */
 void actualizarLeds(uint16_t distancia) {
-	if (distancia < rango1) {
+	if (distancia < RANGO1) {
         LedOff(LED_1); 
 		LedOff(LED_2); 
 		LedOff(LED_3);
     } 
-    else if (distancia >= rango1 && distancia < rango2) {
+    else if (distancia >= RANGO1 && distancia < RANGO2) {
         LedOn(LED_1); 
 		LedOff(LED_2); 
 		LedOff(LED_3);
     } 
-    else if (distancia >= rango2 && distancia < rango3) {
+    else if (distancia >= RANGO2 && distancia < RANGO3) {
         LedOn(LED_1); 
 		LedOn(LED_2); 
 		LedOff(LED_3);
@@ -175,21 +160,21 @@ static void TareaSensorDistancia(void *pvParameter) {
  * @brief Función invocada en la interrupción del timer, que envía una notificación a la tarea 1
  *  para medir o no distancia, activar los leds o la pantalla LCD.
  */
-void TimerInterrupcion(void* param){
+void TimerInterrupcion(void *pvParameter){
     vTaskNotifyGiveFromISR(TareaSensorDistancia_task_handle, pdFALSE);    /* Envía una notificación a la tarea 1 para interrumpirla */
 }
 
 /**
  * @brief Función que atiende a la Tecla 1, que activa o desactiva la medición de distancia.
  */
-void switch1_interrupcion (void* param){
+void switch1_interrupcion (void *pvParameter){
     medir =! medir;   /* Cambia el estado de medir */
 }
 
 /**
  * @brief Función que atiende a la Tecla 2, que cambia el estado del hold (mantener o no el resultado).
  */
-void switch2_interrupcion (void* param){
+void switch2_interrupcion (void *pvParameter){
     hold =! hold;                       /* Cambia el estado del hold */
 }
 
@@ -197,27 +182,33 @@ void switch2_interrupcion (void* param){
 * @brief Función que envia las mediciones a la terminal de PC.
  * * @param distancia valor de distancia medida.
  */
-void uart_task(void *param) {
+void uart_task(void *pvParameter) {
+    serial_config_t *p_config = (serial_config_t *)pvParameter;
     while(1){
-        UartSendString(UART_PC, (char*)UartItoa(distancia,10));
+        UartSendString(p_config->port, (char*)UartItoa(distancia,10));
+        UartSendString(p_config->port, " cm\r\n");
         vTaskDelay(CONFIG_BLINK_PERIOD_LEDS / portTICK_PERIOD_MS);
     }
 }
-
-
+//PARA CUANDO PRECISA LECTURA DE TECLAS
+//void TeclasUART(void *pvParameters){
+//    uint8_t tecla;
+//    UartReadByte(UART_PC, &tecla);
+//    if(tecla == 'o') medir = !medir;
+//    if(tecla == 'h') hold = !hold;
+//}
 /*==================[external functions definition]==========================*/
 void app_main(void){
 	printf("Inicializacion\n");
 	LedsInit();
+    SwitchesInit();
 	LcdItsE0803Init();
-	SwitchesInit();
 	HcSr04Init(GPIO_3, GPIO_2); 
 	
-
     /* Inicialización de timers */
     timer_config_t timer_1 = {
         .timer = TIMER_A, 
-        .period = timer_tarea_1US, 
+        .period = TIMER_TAREA_1US, 
         .func_p = TimerInterrupcion, 
         .param_p = NULL
     };
@@ -234,7 +225,7 @@ void app_main(void){
     /* Inicialización del conteo de timers */
     TimerStart(timer_1.timer);
 
-    serial_config_t config_uart = { 
+    static serial_config_t config_uart = { 
         .port = UART_PC,	/*!< port */
 	    .baud_rate = BAUD_RATE,		/*!< baudrate (bits per second) */
 	    .func_p = NULL,
@@ -243,7 +234,11 @@ void app_main(void){
 
     UartInit(&config_uart);
 
-    xTaskCreate(&uart_task, "UART", 512, &config_uart,5,&uart_task_handle);
+    xTaskCreate(&uart_task, "UART", 2048, (void*) &config_uart,5,&uart_task_handle);
+    
+    //Para cuando implemente el control por teclas
+    //config_uart.func_p = TeclasUART;
+
 }
 
 /*==================[end of file]============================================*/
