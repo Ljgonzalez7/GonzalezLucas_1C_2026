@@ -68,6 +68,17 @@
 
 
 /*==================[internal data definition]===============================*/
+/** @def SensorDistancia_task_handle 
+ * @brief Definicion que indica el orden de prioridad en el procesamiento de tarea medir.
+ */
+
+TaskHandle_t SensorDistancia_task_handle = NULL;
+
+/** @def LeerTeclas_task_handle 
+ * @brief Definicion que indica el orden de prioridad en el procesamiento de tarea medir.
+ */
+
+TaskHandle_t LeerTeclas_task_handle = NULL;
 
 /** @def medir 
  * @brief variable booleana filtro de medir o parar medición.
@@ -167,7 +178,7 @@ void app_main(void){
 	HcSr04Init(GPIO_3, GPIO_2); 
 	
 	printf("Ejecucion de programa\n");
-    xTaskCreate(&TareaLeerTeclas, "LecturaTeclas", 2048, NULL, 5, NULL);
-	xTaskCreate(&TareaSensorDistancia, "SensorDist", 2048, NULL, 5, NULL);
+    xTaskCreate(&TareaLeerTeclas, "LecturaTeclas", 2048, NULL, 5, &LeerTeclas_task_handle);
+	xTaskCreate(&TareaSensorDistancia, "SensorDist", 2048, NULL, 5, &SensorDistancia_task_handle);
 }
 /*==================[end of file]============================================*/
