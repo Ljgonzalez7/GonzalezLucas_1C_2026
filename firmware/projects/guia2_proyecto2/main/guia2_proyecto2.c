@@ -55,17 +55,17 @@
  */
 #define CONFIG_BLINK_PERIOD_LEDS 1000
 
-/** @def timer_tarea_1US
+/** @def TIMER_TAREA_1US
  * @brief Variable que controla el timer de la tarea 1 (lectura de teclas) [us]
  */
-#define timer_tarea_1US 1000000
+#define TIMER_TAREA_1US 1000000
 
-/** @def rangos 
+/** @def RANGOS 
  * @brief configuracion de umbrales de medición.
  */
-#define rango1 10
-#define rango2 20
-#define rango3 30
+#define RANGO1 10
+#define RANGO2 20
+#define RANGO3 30
 
 
 
@@ -74,7 +74,7 @@
  * @brief Definicion que indica el orden de prioridad en el procesamiento de tarea medir.
  */
 
-TaskHandle_t TareaSensorDistancia_task_handle = NULL;
+TaskHandle_t SensorDistancia_task_handle = NULL;
 
 /** @def medir 
  * @brief variable booleana filtro de medir o parar medición.
@@ -85,6 +85,7 @@ volatile bool medir = true;
  * @brief variable booleana filtro para mantener dato en pantalla LCD.
  */
 volatile bool hold = false;
+
 /** @def distancia 
  * @brief variable para almacenar la distancia de la medición.
  */
@@ -97,17 +98,17 @@ uint16_t distancia = 0;
  * * @param distancia valor de distancia medido en cm.
  */
 void actualizarLeds(uint16_t distancia) {
-	if (distancia < rango1) {
+	if (distancia < RANGO1) {
         LedOff(LED_1); 
 		LedOff(LED_2); 
 		LedOff(LED_3);
     } 
-    else if (distancia >= rango1 && distancia < rango2) {
+    else if (distancia >= RANGO1 && distancia < RANGO2) {
         LedOn(LED_1); 
 		LedOff(LED_2); 
 		LedOff(LED_3);
     } 
-    else if (distancia >= rango2 && distancia < rango3) {
+    else if (distancia >= RANGO2 && distancia < RANGO3) {
         LedOn(LED_1); 
 		LedOn(LED_2); 
 		LedOff(LED_3);
@@ -152,7 +153,7 @@ static void TareaSensorDistancia(void *pvParameter) {
  *  para medir o no distancia, activar los leds o la pantalla LCD.
  */
 void TimerInterrupcion(void* param){
-    vTaskNotifyGiveFromISR(TareaSensorDistancia_task_handle, pdFALSE);    /* Envía una notificación a la tarea 1 para interrumpirla */
+    vTaskNotifyGiveFromISR(SensorDistancia_task_handle, pdFALSE);    /* Envía una notificación a la tarea 1 para interrumpirla */
 }
 
 /**
@@ -181,7 +182,7 @@ void app_main(void){
     /* Inicialización de timers */
     timer_config_t timer_1 = {
         .timer = TIMER_A, 
-        .period = timer_tarea_1US, 
+        .period = TIMER_TAREA_1US, 
         .func_p = TimerInterrupcion, 
         .param_p = NULL
     };
@@ -189,7 +190,7 @@ void app_main(void){
     TimerInit(&timer_1);
 
 	printf("Ejecucion de programa\n");
-	xTaskCreate(&TareaSensorDistancia, "SensorDist", 2048, NULL, 5, &TareaSensorDistancia_task_handle);
+	xTaskCreate(&TareaSensorDistancia, "SensorDist", 2048, NULL, 5, &SensorDistancia_task_handle);
     
     /* Interrupciones por switch*/
     SwitchActivInt(SWITCH_1, switch1_interrupcion, NULL);
