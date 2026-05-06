@@ -79,12 +79,17 @@ TaskHandle_t TareaSensorDistancia_task_handle = NULL;
 /** @def medir 
  * @brief variable booleana filtro de medir o parar medición.
  */
-bool medir = true;
+volatile bool medir = true;
 
 /** @def hold 
  * @brief variable booleana filtro para mantener dato en pantalla LCD.
  */
-bool hold = false;
+volatile bool hold = false;
+/** @def distancia 
+ * @brief variable para almacenar la distancia de la medición.
+ */
+
+uint16_t distancia = 0; 
 
 /*==================[internal functions declaration]=========================*/
 /** @fn void actualizarLeds(uint16_t distancia)
@@ -125,7 +130,7 @@ static void TareaSensorDistancia(void *pvParameter) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);    /* La tarea espera en este punto hasta recibir una notificación */
 
         if (medir) {
-            uint16_t distancia = HcSr04ReadDistanceInCentimeters();
+            distancia = HcSr04ReadDistanceInCentimeters();
             actualizarLeds(distancia);
 			printf("Distancia detectada: %d cm\n", distancia); 
 
