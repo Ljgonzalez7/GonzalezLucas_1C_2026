@@ -1,0 +1,196 @@
+/*! @mainpage Guia 2 - Proyecto 1:
+ * Descripcion
+ * @section genDesc General Description
+ *
+ 
+ *
+ *
+ * @section hardConn Hardware Connection
+ *
+ * |    Peripheral  |   ESP32       |
+ * |:--------------:|:--------------|
+ * |    Segmento A  |    GPIO_20    |
+ * |    Segmento B  |    GPIO_21    |
+ * |    Segmento C  |    GPIO_22    |
+ * |    Segmento D  |    GPIO_23    |
+ * |    Digito Uni  |    GPIO_9     |
+ * |    Digito Dec  |    GPIO_18    |
+ * |    Digito Cen  |    GPIO_19    |
+ * |    GND         |    GND        |
+ * |    ECHO        |    GPIO_3     |
+ * |    TRIGGER     |    GPIO_2     |
+ * |    5V          |    5V         |
+
+
+
+ *
+ * @section changelog Changelog
+ *
+ * |   Date	    | Description                                    |
+ * |:----------:|:-----------------------------------------------|
+ * | 15/04/2026 | Document creation		                         |
+ *
+ * @author Lucas Gonzalez (lucas.gonzalez@ingenieria.uner.edu.ar)
+ *
+ */
+
+/*==================[inclusions]=============================================*/
+#include <stdio.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "led.h"
+#include "switch.h"
+#include "gpio_mcu.h"
+#include "hc_sr04.h"
+#include "lcditse0803.h"
+#include "uart_mcu.h"
+
+/*==================[macros and definitions]=================================*/
+/** @def CONFIG_BLINK_PERIOD_LEDS 
+ * @brief configuracion del periodo de parpadeo leds.
+ */
+#define CONFIG_BLINK_PERIOD_LEDS 1000
+
+/** @def rangos 
+ * @brief configuracion de umbrales de medición.
+ */
+#define rango1 10
+#define rango2 20
+#define rango3 30
+#define BAUD_RATE 9600
+
+
+/*==================[internal data definition]===============================*/
+/**
+ * @brief Serial port configuration struct
+ */
+typedef struct {			
+	uart_mcu_port_t port;	/*!< port */
+	uint32_t baud_rate;		/*!< baudrate (bits per second) */
+	void *func_p;			/*!< Pointer to callback function to call when receiving data (= UART_NO_INT if not requiered)*/
+	void *param_p;			/*!< Pointer to callback function parameters */
+} serial_config_t;
+
+
+/** @def leds_task_handle 
+ * @brief Definicion que indica el orden de prioridad en el prosecamiento de tareas.
+ */
+//TaskHandle_t led1_task_handle = NULL; PARA CUANDO USEMOS TAREAS
+/** @def medir 
+ * @brief variable booleana filtro de medir o parar medición.
+ */
+bool medir = true;
+
+/** @def hold 
+ * @brief variable booleana filtro para mantener dato en pantalla LCD.
+ */
+bool hold = false;
+
+/*==================[internal functions declaration]=========================*/
+/** @fn void actualizarLeds(uint16_t distancia)
+* @brief Función que cambia el estado de los leds según distancia medida.
+ * * @param distancia valor de distancia medido en cm.
+ */
+void actualizarLeds(uint16_t distancia) {
+	if (distancia < rango1) {
+        LedOff(LED_1); 
+		LedOff(LED_2); 
+		LedOff(LED_3);
+    } 
+    else if (distancia >= rango1 && distancia < rango2) {
+        LedOn(LED_1); 
+		LedOff(LED_2); 
+		LedOff(LED_3);
+    } 
+    else if (distancia >= rango2 && distancia < rango3) {
+        LedOn(LED_1); 
+		LedOn(LED_2); 
+		LedOff(LED_3);
+    } 
+    else {
+        LedOn(LED_1); 
+		LedOn(LED_2); 
+		LedOn(LED_3);
+    }
+	
+}
+
+/** @fn void leerTeclas(bool *medir, bool *hold)
+ * @brief Función que acciona según lectura de teclas.
+ * * @param medir puntero a direccion de memoria de variable booleana medir.
+ * * @param hold puntero a direccion de memoria de variable booleana hold.
+ */
+
+void leerTeclas(bool *medir, bool *hold) {
+    uint8_t teclas = SwitchesRead();
+    if (teclas & SWITCH_1) {
+        *medir = !(*medir);
+        // vTaskDelay(100 / portTICK_PERIOD_MS); // Antirebote simple
+    }
+    if (teclas & SWITCH_2) {
+        *hold = !(*hold);
+    }
+}
+
+/** @fn void TareaSensorDistancia(void *pvParameter)
+ * @brief Tarea que integra el programa de sensado, interacción y mostrado por pantalla.
+ */
+
+void TareaSensorDistancia(void *pvParameter) {    
+	while (1) {
+        leerTeclas(&medir, &hold); 
+
+        if (medir) {
+            uint16_t distancia = HcSr04ReadDistanceInCentimeters();
+            actualizarLeds(distancia);
+			printf("Distancia detectada: %d cm\n", distancia); 
+
+            if (!hold) {
+                LcdItsE0803Write(distancia);
+            }
+        } else {
+            LcdItsE0803Off();
+            LedOff(LED_1); 
+			LedOff(LED_2); 
+			LedOff(LED_3);
+        }
+
+        vTaskDelay(CONFIG_BLINK_PERIOD_LEDS/ portTICK_PERIOD_MS);
+    }
+}
+
+/** @fn void enviar_a_pc(uint16_t distancia)
+* @brief Función que envia las mediciones a la terminal de PC.
+ * * @param distancia valor de distancia medida.
+ */
+void enviar_a_PC(uint16_t distancia) {
+    
+}
+
+
+/*==================[external functions definition]==========================*/
+void app_main(void){
+	printf("Inicializacion\n");
+	LedsInit();
+	LcdItsE0803Init();
+	SwitchesInit();
+	HcSr04Init(GPIO_3, GPIO_2); 
+    
+    serial_config_t config_uart = { 
+        PC;	/*!< port */
+	    BAUD_RATE;		/*!< baudrate (bits per second) */
+	    void *func_p;			/*!< Pointer to callback function to call when receiving data (= UART_NO_INT if not requiered)*/
+	    void *param_p;	
+    }
+
+    UARTInit(*config_uart);
+    UartItoa(uint32_t val, uint8_t base);
+    UARTSendString();
+  
+	
+	printf("Ejecucion de programa\n");
+	xTaskCreate(&TareaSensorDistancia, "SensorDist", 2048, NULL, 5, NULL);
+}
+/*==================[end of file]============================================*/
