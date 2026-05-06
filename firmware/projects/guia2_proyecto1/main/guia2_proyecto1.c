@@ -1,9 +1,10 @@
 /*! @mainpage Guia 2 - Proyecto 1:
  * Descripcion
  * @section genDesc General Description
- *
- 
- *
+ * 
+ * Proyecto inicial donde se utiliza manejo de tareas para la medición de distancia mediante un sensor
+ * de ultrasonido HSR04. Se coordina el encendido de leds de acuerdo a la distancia medida y se muestra
+ * por pantalla LCD.
  *
  * @section hardConn Hardware Connection
  *
@@ -52,29 +53,37 @@
  */
 #define CONFIG_BLINK_PERIOD_LEDS 1000
 
-/** @def rangos 
+/** @def CONFIG_RETARDO_TECLA 
+ * @brief configuracion del retardo para la deteccion de tecla pulsada.
+ */
+#define CONFIG_RETARDO_TECLA 100
+
+/** @def RANGOS 
  * @brief configuracion de umbrales de medición.
  */
-#define rango1 10
-#define rango2 20
-#define rango3 30
+#define RANGO1 10
+#define RANGO2 20
+#define RANGO3 30
 
 
 
 /*==================[internal data definition]===============================*/
-/** @def leds_task_handle 
- * @brief Definicion que indica el orden de prioridad en el prosecamiento de tareas.
- */
-//TaskHandle_t led1_task_handle = NULL; PARA CUANDO USEMOS TAREAS
+
 /** @def medir 
  * @brief variable booleana filtro de medir o parar medición.
  */
-bool medir = true;
+volatile bool medir = true;
 
 /** @def hold 
  * @brief variable booleana filtro para mantener dato en pantalla LCD.
  */
-bool hold = false;
+volatile bool hold = false;
+
+/** @def distancia 
+ * @brief variable para almacenar la distancia de la medición.
+ */
+
+uint16_t distancia = 0; 
 
 /*==================[internal functions declaration]=========================*/
 /** @fn void actualizarLeds(uint16_t distancia)
@@ -82,17 +91,17 @@ bool hold = false;
  * * @param distancia valor de distancia medido en cm.
  */
 void actualizarLeds(uint16_t distancia) {
-	if (distancia < rango1) {
+	if (distancia < RANGO1) {
         LedOff(LED_1); 
 		LedOff(LED_2); 
 		LedOff(LED_3);
     } 
-    else if (distancia >= rango1 && distancia < rango2) {
+    else if (distancia >= RANGO1 && distancia < RANGO2) {
         LedOn(LED_1); 
 		LedOff(LED_2); 
 		LedOff(LED_3);
     } 
-    else if (distancia >= rango2 && distancia < rango3) {
+    else if (distancia >= RANGO2 && distancia < RANGO3) {
         LedOn(LED_1); 
 		LedOn(LED_2); 
 		LedOff(LED_3);
@@ -105,20 +114,21 @@ void actualizarLeds(uint16_t distancia) {
 	
 }
 
-/** @fn void leerTeclas(bool *medir, bool *hold)
- * @brief Función que acciona según lectura de teclas.
- * * @param medir puntero a direccion de memoria de variable booleana medir.
- * * @param hold puntero a direccion de memoria de variable booleana hold.
+/** @fn void TarealeerTeclas(void *pvParameter)
+ * @brief Tarea que acciona según lectura de teclas.
  */
 
-void leerTeclas(bool *medir, bool *hold) {
-    uint8_t teclas = SwitchesRead();
-    if (teclas & SWITCH_1) {
-        *medir = !(*medir);
-        // vTaskDelay(100 / portTICK_PERIOD_MS); // Antirebote simple
-    }
-    if (teclas & SWITCH_2) {
-        *hold = !(*hold);
+static void TareaLeerTeclas(void *pvParameter) {
+    while (1) {
+        uint8_t teclas = SwitchesRead();
+        
+        if (teclas & SWITCH_1) {
+            medir = !medir;
+        }
+        if (teclas & SWITCH_2) {
+            hold = !hold;
+        }
+        vTaskDelay(CONFIG_RETARDO_TECLA / portTICK_PERIOD_MS); 
     }
 }
 
@@ -128,10 +138,8 @@ void leerTeclas(bool *medir, bool *hold) {
 
 void TareaSensorDistancia(void *pvParameter) {    
 	while (1) {
-        leerTeclas(&medir, &hold); 
-
         if (medir) {
-            uint16_t distancia = HcSr04ReadDistanceInCentimeters();
+            distancia = HcSr04ReadDistanceInCentimeters();
             actualizarLeds(distancia);
 			printf("Distancia detectada: %d cm\n", distancia); 
 
@@ -159,6 +167,7 @@ void app_main(void){
 	HcSr04Init(GPIO_3, GPIO_2); 
 	
 	printf("Ejecucion de programa\n");
+    xTaskCreate(&TareaLeerTeclas, "LecturaTeclas", 2048, NULL, 5, NULL);
 	xTaskCreate(&TareaSensorDistancia, "SensorDist", 2048, NULL, 5, NULL);
 }
 /*==================[end of file]============================================*/
