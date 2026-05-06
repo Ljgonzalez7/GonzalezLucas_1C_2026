@@ -61,12 +61,16 @@
  */
 #define TIMER_TAREA_1US 1000000
 
-/** @def rangos 
+/** @def RANGOS
  * @brief configuracion de umbrales de medición.
  */
 #define RANGO1 10
 #define RANGO2 20
 #define RANGO3 30
+
+/** @def BAUD_RATE
+ * @brief velocidad de transmisión de datos por segundo. (9600 bajo, 115200 alto)
+ */
 #define BAUD_RATE 9600
 
 /*==================[internal data definition]===============================*/
@@ -75,13 +79,13 @@
  * @brief Definicion que indica el orden de prioridad en el procesamiento del uart.
  */
 
-TaskHandle_t uart_task_handle = NULL;
+TaskHandle_t Uart_task_handle = NULL;
 
-/** @def TareaSensorDistancia_task_handle 
- * @brief Definicion que indica el orden de prioridad en el procesamiento de tarea medir.
+/** @def SensorDistancia_task_handle 
+ * @brief Definicion que indica el orden de prioridad en el procesamiento de tarea sensar.
  */
 
-TaskHandle_t TareaSensorDistancia_task_handle = NULL;
+TaskHandle_t SensorDistancia_task_handle = NULL;
 
 /** @def medir 
  * @brief variable booleana filtro de medir o parar medición.
@@ -160,29 +164,29 @@ static void TareaSensorDistancia(void *pvParameter) {
  * @brief Función invocada en la interrupción del timer, que envía una notificación a la tarea 1
  *  para medir o no distancia, activar los leds o la pantalla LCD.
  */
-void TimerInterrupcion(void *pvParameter){
-    vTaskNotifyGiveFromISR(TareaSensorDistancia_task_handle, pdFALSE);    /* Envía una notificación a la tarea 1 para interrumpirla */
+void TimerInterrupcion(void *param){
+    vTaskNotifyGiveFromISR(SensorDistancia_task_handle, pdFALSE);    /* Envía una notificación a la tarea 1 para interrumpirla */
 }
 
 /**
  * @brief Función que atiende a la Tecla 1, que activa o desactiva la medición de distancia.
  */
-void switch1_interrupcion (void *pvParameter){
+void switch1_interrupcion (void *param){
     medir =! medir;   /* Cambia el estado de medir */
 }
 
 /**
  * @brief Función que atiende a la Tecla 2, que cambia el estado del hold (mantener o no el resultado).
  */
-void switch2_interrupcion (void *pvParameter){
+void switch2_interrupcion (void *param){
     hold =! hold;                       /* Cambia el estado del hold */
 }
 
-/** @fn void enviar_a_pc(uint16_t distancia)
+/** @fn void Tarea_Uart(uint16_t distancia)
 * @brief Función que envia las mediciones a la terminal de PC.
- * * @param distancia valor de distancia medida.
+ * * @param p_config estructura del uart, detalla el puerto.
  */
-void uart_task(void *pvParameter) {
+void Tarea_Uart(void *pvParameter) {
     serial_config_t *p_config = (serial_config_t *)pvParameter;
     while(1){
         UartSendString(p_config->port, (char*)UartItoa(distancia,10));
@@ -216,7 +220,7 @@ void app_main(void){
     TimerInit(&timer_1);
 
 	printf("Ejecucion de programa\n");
-	xTaskCreate(&TareaSensorDistancia, "SensorDist", 2048, NULL, 5, &TareaSensorDistancia_task_handle);
+	xTaskCreate(&TareaSensorDistancia, "SensorDist", 2048, NULL, 5, &SensorDistancia_task_handle);
     
     /* Interrupciones por switch*/
     SwitchActivInt(SWITCH_1, switch1_interrupcion, NULL);
@@ -234,7 +238,7 @@ void app_main(void){
 
     UartInit(&config_uart);
 
-    xTaskCreate(&uart_task, "UART", 2048, (void*) &config_uart,5,&uart_task_handle);
+    xTaskCreate(&Tarea_Uart, "UART", 2048, (void*) &config_uart,5,&Uart_task_handle);
     
     //Para cuando implemente el control por teclas
     //config_uart.func_p = TeclasUART;
