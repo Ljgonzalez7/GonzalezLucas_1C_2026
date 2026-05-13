@@ -194,13 +194,18 @@ void Tarea_Uart(void *pvParameter) {
         vTaskDelay(CONFIG_BLINK_PERIOD_LEDS / portTICK_PERIOD_MS);
     }
 }
-//PARA CUANDO PRECISA LECTURA DE TECLAS
-//void TeclasUART(void *pvParameters){
-//    uint8_t tecla;
-//    UartReadByte(UART_PC, &tecla);
-//    if(tecla == 'o') medir = !medir;
-//    if(tecla == 'h') hold = !hold;
-//}
+
+void Funcion_entrada(){
+    uint8_t tecla;
+    UartReadByte(UART_PC, &tecla);
+    if(tecla == 'o' || tecla == 'O') {
+        medir = !medir;
+    }
+    if(tecla == 'h' || tecla == 'H') {
+        hold = !hold;
+    }
+}
+
 /*==================[external functions definition]==========================*/
 void app_main(void){
 	printf("Inicializacion\n");
@@ -228,20 +233,17 @@ void app_main(void){
     
     /* Inicialización del conteo de timers */
     TimerStart(timer_1.timer);
-
-    static serial_config_t config_uart = { 
+    
+    static serial_config_t config_uart_entrada = { 
         .port = UART_PC,	/*!< port */
 	    .baud_rate = BAUD_RATE,		/*!< baudrate (bits per second) */
-	    .func_p = NULL,
+	    .func_p = Funcion_entrada,
         .param_p = NULL			/*!< Pointer to callback function to call when receiving data (= UART_NO_INT if not requiered)*/	
     };
-
-    UartInit(&config_uart);
-
-    xTaskCreate(&Tarea_Uart, "UART", 2048, (void*) &config_uart,5,&Uart_task_handle);
     
-    //Para cuando implemente el control por teclas
-    //config_uart.func_p = TeclasUART;
+    UartInit(&config_uart_entrada);
+
+    xTaskCreate(&Tarea_Uart, "UART", 2048, (void*) &config_uart_entrada,5,&Uart_task_handle);
 
 }
 
