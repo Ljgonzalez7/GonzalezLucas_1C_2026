@@ -55,7 +55,7 @@
 /** @def CONFIG_BLINK_PERIOD_LEDS 
  * @brief configuracion del periodo de parpadeo leds.
  */
-#define CONFIG_BLINK_PERIOD_LEDS 1000
+#define CONFIG_BLINK_PERIOD_LEDS 500
 
 /** @def timer_sensado_40ms
  * @brief Variable que controla el timer de la tarea sensado [us]
@@ -63,11 +63,20 @@
 #define TIMER_SENSADO_US 40000     /* 40 ms de período (Frecuencia de muestreo 25 Hz) */
 
 
-/** @def timer_general_1min
+/** @def tiempo_calentamiento_ms
  * @brief Variable que controla el timer de calentamiento [us]
  */
 #define TIEMPO_CALENTAMIENTO_MS  60000  /* 60000 ms = 1 Minuto */
 
+/** @def periodo_datos_a_pc
+ * @brief Variable que define el periodo de enviado de datos a PC [ms]
+ */
+#define PERIODO_TELEMETRIA_MS    50   /* Envío de datos a la PC cada 50 ms */
+
+/** @def chequeo_tareas_ctrl_ms
+ * @brief variable uqe controla el tiempo de enviado de reporte
+ */
+#define CHEQUEO_TAREAS_CTRL_MS  300   /* Tasa de revisión para reportes/control */
 
 /** @def baud_rate 
  * @brief Variable de velocidad de transmisión a la PC
@@ -79,6 +88,12 @@
  */
 #define RANGO1 12
 #define RANGO2 5
+
+
+/** @def DIST_MIN_RESET
+ * @brief distancia minima a la que comienza el sensor a medir.
+ */
+#define DIST_MIN_RESET 30
 
 /*==================[internal data definition]===============================*/
 
@@ -102,17 +117,28 @@ volatile bool reporte = false;
  */
 volatile bool calentando = false;
 
+/** @def pierna_derecha
+ * @brief variable booleana para verificar la pierna bajo estudio.
+ */
+volatile bool pierna_derecha = true;
+
 /** @def distancia_frontal 
  * @brief variable para almacenar la distancia frontal de la medición.
  */
 
 uint16_t distancia_frontal = 0; 
 
-/** @def distancia_frontal_min 
- * @brief variable para almacenar la distancia frontal minima.
+/** @def distancia_frontal_min_der 
+ * @brief variable para almacenar la distancia frontal minima de la pierna derecha.
  */
 
-uint16_t distancia_frontal_min = 30; 
+uint16_t distancia_frontal_min_der = DIST_MIN_RESET; 
+
+/** @def distancia_frontal_min_izq 
+ * @brief variable para almacenar la distancia frontal minima de la pierna izquierda.
+ */
+
+uint16_t distancia_frontal_min_izq = DIST_MIN_RESET;
 
 /** @def distancia_lateral 
  * @brief variable para almacenar la distancia lateral de la medición.
@@ -175,18 +201,28 @@ static void TareaSensorDistanciaFrontal(void *pvParameter) {
 	while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);    /* La tarea espera en este punto hasta recibir una notificación */
 
-        if (medir) {
+        if (inicio && medir && !calentando) {
             distancia_frontal = HcSr04ReadDistanceInCentimeters();
             actualizarLeds(distancia_frontal);
 			printf("Distancia detectada: %d cm\n", distancia_frontal); 
 
-            if (distancia_frontal<distancia_frontal_min) {
-                distancia_frontal_min=distancia_frontal;
-            }
-            
-            LcdItsE0803Write(distancia_frontal_min);     
-            
+            if (pierna_derecha) {
+                if (distancia_frontal < distancia_frontal_min_der && distancia_frontal > 0) {
+                    distancia_frontal_min_der = distancia_frontal;
+                }
+                LcdItsE0803Write(distancia_frontal_min_der); /* Muestra récord derecho */
             } 
+            else {
+                if (distancia_frontal < distancia_frontal_min_izq && distancia_frontal > 0) {
+                    distancia_frontal_min_izq = distancia_frontal;
+                }
+                LcdItsE0803Write(distancia_frontal_min_izq); /* Muestra récord izquierdo */
+            }
+        }
+            else if (inicio && calentando) {
+            /* MODO CALENTAMIENTO: La tarea del sensor NO hace nada.
+               Deja que la TareaCalentamientoArticular maneje el parpadeo en paz */
+        } 
             else {
             LcdItsE0803Off();
             LedOff(LED_1); 
@@ -210,10 +246,10 @@ static void TareaCalentamientoArticular(void *pvParameter) {
             UartSendString(UART_PC, "Estado: Calentamiento en curso...\r\n");
             calentando = true;
 
-            /* Indicación visual en el LCD de que está en preparación (ej. rayas o animación) */
-            LcdItsE0803Write(111); // Podés mandar un código visual al LCD
+            /* Indicación visual en el LCD  */
+            LcdItsE0803Write(111);
 
-            /* NUEVA LÓGICA: Bucle de tiempo con vTaskDelay para el blinkeo */
+            /*Bucle de tiempo con vTaskDelay para el blinkeo */
             // 120 iteraciones de 500ms = 60 segundos (1 minuto)
             for (int i = 0; i < 120; i++) {
                 /* Si el usuario apaga el estudio en el medio con 'O', salimos del bucle */
@@ -223,22 +259,24 @@ static void TareaCalentamientoArticular(void *pvParameter) {
                 LedToggle(LED_2);
                 LedToggle(LED_3);
 
-                /* La tarea se duerme de forma eficiente por 500 ms */
-                vTaskDelay(500 / portTICK_PERIOD_MS); 
+                /* La tarea se duerme de forma eficiente por 1000 ms */
+                vTaskDelay(CONFIG_BLINK_PERIOD_LEDS/portTICK_PERIOD_MS); 
             }
 
             /* Al terminar el bucle (pasó el minuto), apagamos banderas y activamos el test */
             if (inicio) { 
                 calentando = false;
                 printf("--- CALENTAMIENTO FINALIZADO. INICIE EL TEST ---\n");
-                UartSendString(UART_PC, "Estado: Test En espera, presione M para medir...\r\n");
+                UartSendString(UART_PC, "Estado: Test En Espera, presione M para medir...\r\n");
                 
                 /* Dejamos los LEDs en un estado conocido antes de empezar */
-                LedOff(LED_1); LedOff(LED_2); LedOff(LED_3);
+                LedOff(LED_1); 
+                LedOff(LED_2); 
+                LedOff(LED_3);
             }
         }
         
-        vTaskDelay(200 / portTICK_PERIOD_MS); /* Tasa de chequeo de la tarea */
+        vTaskDelay(CHEQUEO_TAREAS_CTRL_MS / portTICK_PERIOD_MS); /* Tasa de chequeo de la tarea */
     }
 }
 
@@ -262,7 +300,17 @@ void TimerInterrupcion(void *param){
  * @brief Función que atiende a la Tecla 1, que inicia o finaliza el estudio.
  */
 void switch1_interrupcion (void *param){
-    inicio =! inicio;   /* Cambia el estado de inicio */
+    inicio = !inicio;   
+    if (inicio) {
+        calentando = false;
+        medir = false;  // Obliga a pasar por el calentamiento primero
+    } else {
+        calentando = false;
+        medir = false;
+        distancia_frontal_min_der = DIST_MIN_RESET; // Reset del récord al apagar
+        distancia_frontal_min_izq = DIST_MIN_RESET; // Reset del récord al apagar
+    
+    }
 }
 
 /**
@@ -291,7 +339,7 @@ void TareaTelemetriaUart(void *pvParameter) {
             UartSendString(UART_PC, (char*)UartItoa(distancia_frontal, 10));
             UartSendString(UART_PC, "\r\n");
         }
-        vTaskDelay(50 / portTICK_PERIOD_MS); /* 20 muestras por segundo en el plotter de la PC */
+        vTaskDelay(PERIODO_TELEMETRIA_MS / portTICK_PERIOD_MS); /* 20 muestras por segundo en el plotter de la PC */
     }
 }
 
@@ -312,37 +360,74 @@ static void TareaReporte(void *pvParameter) {
             UartSendString(UART_PC, "==================================================\r\n");
             
             // 3. Resultado de movilidad (Dorsiflexión)
-            UartSendString(UART_PC, " -> Máxima Dorsiflexión Lograda: ");
-            if (distancia_frontal_min == 30) {
+            UartSendString(UART_PC, " -> Máxima Dorsiflexión PIERNA DERECHA: ");
+            if (distancia_frontal_min_der == DIST_MIN_RESET) {
                 UartSendString(UART_PC, "No se registraron mediciones válidas.\r\n");
             } else {
-                UartSendString(UART_PC, (char*)UartItoa(distancia_frontal_min, 10));
+                UartSendString(UART_PC, (char*)UartItoa(distancia_frontal_min_der, 10));
                 UartSendString(UART_PC, " cm a la pared.\r\n");
                 
                 // Clasificación clínica rápida según el resultado
-                if (distancia_frontal_min <= RANGO2) {
+                if (distancia_frontal_min_der <= RANGO2) {
                     UartSendString(UART_PC, "    [EVALUACIÓN]: Movilidad ÓPTIMA (Rango Excelente).\r\n");
-                } else if (distancia_frontal_min > RANGO2&& distancia_frontal_min <= RANGO1) {
+                } else if (distancia_frontal_min_der > RANGO2&& distancia_frontal_min_der <= RANGO1) {
                     UartSendString(UART_PC, "    [EVALUACIÓN]: Movilidad REGULAR (Restricción leve).\r\n");
                 } else {
                     UartSendString(UART_PC, "    [EVALUACIÓN]: Movilidad ACORTADA (Restricción severa).\r\n");
                 }
             }
 
+            UartSendString(UART_PC, " -> Máxima Dorsiflexión PIERNA IZQUIERDA: ");
+            if (distancia_frontal_min_izq == DIST_MIN_RESET) {
+                UartSendString(UART_PC, "No se registraron mediciones válidas.\r\n");
+            } else {
+                UartSendString(UART_PC, (char*)UartItoa(distancia_frontal_min_izq, 10));
+                UartSendString(UART_PC, " cm a la pared.\r\n");
+                
+                // Clasificación clínica rápida según el resultado
+                if (distancia_frontal_min_izq <= RANGO2) {
+                    UartSendString(UART_PC, "    [EVALUACIÓN]: Movilidad ÓPTIMA (Rango Excelente).\r\n");
+                } else if (distancia_frontal_min_izq > RANGO2&& distancia_frontal_min_izq <= RANGO1) {
+                    UartSendString(UART_PC, "    [EVALUACIÓN]: Movilidad REGULAR (Restricción leve).\r\n");
+                } else {
+                    UartSendString(UART_PC, "    [EVALUACIÓN]: Movilidad ACORTADA (Restricción severa).\r\n");
+                }
+            }
+
+            // ANÁLISIS DE ASIMETRÍA (Si ambas fueron medidas)
+            if (distancia_frontal_min_der != DIST_MIN_RESET && distancia_frontal_min_izq != DIST_MIN_RESET) {
+                int16_t asimetria = distancia_frontal_min_der - distancia_frontal_min_izq;
+                if (asimetria < 0) 
+                asimetria = -asimetria; /* Valor absoluto */
+
+                UartSendString(UART_PC, "--------------------------------------------------\r\n");
+                UartSendString(UART_PC, " -> Diferencia entre miembros: ");
+                UartSendString(UART_PC, (char*)UartItoa(asimetria, 10));
+                UartSendString(UART_PC, " cm.\r\n");
+
+                if (asimetria > 2) {
+                    UartSendString(UART_PC, "    [ALERTA CLÍNICA]: Asimetría significativa (> 2 cm).\r\n");
+                    UartSendString(UART_PC, "    Alto riesgo de lesión por compensación.\r\n");
+                } else {
+                    UartSendString(UART_PC, "    [EVALUACIÓN]: Déficit Bilateral Normal (Buen balance).\r\n");
+                }
+            }
+            
             // 4. Cierre del documento
             UartSendString(UART_PC, "==================================================\r\n");
             UartSendString(UART_PC, " Fin del reporte. Listo para una nueva evaluación.\r\n");
             UartSendString(UART_PC, "==================================================\r\n\r\n");
 
             // 5. Reseteamos las variables para una nueva prueba limpia
-            distancia_frontal_min = 30; 
-            reporte =! reporte; 
+            distancia_frontal_min_der = DIST_MIN_RESET;
+            distancia_frontal_min_izq = DIST_MIN_RESET; 
+            reporte = false; 
             
             // Restauramos el estado de medición que tenía antes de pedir el reporte
-            medir =! medir; 
+            medir = false; 
         }
 
-        vTaskDelay(300 / portTICK_PERIOD_MS); /* Tasa de chequeo pasiva */
+        vTaskDelay(CHEQUEO_TAREAS_CTRL_MS / portTICK_PERIOD_MS); /* Tasa de chequeo pasiva */
     }
 }
 
@@ -350,13 +435,32 @@ void Funcion_manejo_teclas(){
     uint8_t tecla;
     UartReadByte(UART_PC, &tecla);
     if(tecla == 'o' || tecla == 'O') {
-        inicio = !inicio;
+        inicio = !inicio;   
+
+       if (inicio) {
+            calentando = false;
+            medir = false;  // Fuerza el estado de calentamiento al encender
+        } else {
+            calentando = false;
+            medir = false;
+            distancia_frontal_min_der = DIST_MIN_RESET;
+            distancia_frontal_min_izq = DIST_MIN_RESET;
+        }
     }
     if(tecla == 'm' || tecla == 'M') {
         medir = !medir;
     }
 	if(tecla == 'r' || tecla == 'R') {
         reporte = !reporte;
+    }
+    
+    if(tecla == 'p' || tecla == 'P') {
+        pierna_derecha = !pierna_derecha; 
+        if (pierna_derecha) {
+            UartSendString(UART_PC, "-> Evaluando: PIERNA DERECHA\r\n");
+        } else {
+            UartSendString(UART_PC, "-> Evaluando: PIERNA IZQUIERDA\r\n");
+        }
     }
 }
 
