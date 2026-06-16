@@ -22,7 +22,6 @@
  * |    ECHO        |    GPIO_3     |
  * |    TRIGGER     |    GPIO_2     |
  * |    5V          |    5V         |
- * |    ALARMA      |    GPIO_?     |  
  * 
  *
  * @section changelog Changelog
@@ -344,7 +343,7 @@ void TareaTelemetriaUart(void *pvParameter) {
 }
 
 /** /
- * @fn TareaReporteEstudio
+ * @fn TareaReporte
  * @brief Elabora el reporte final del estudio.
  */
 static void TareaReporte(void *pvParameter) {    
