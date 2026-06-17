@@ -203,7 +203,7 @@ static void TareaSensorDistanciaFrontal(void *pvParameter) {
         if (inicio && medir && !calentando) {
             distancia_frontal = HcSr04ReadDistanceInCentimeters();
             actualizarLeds(distancia_frontal);
-			printf("Distancia detectada: %d cm\n", distancia_frontal); 
+			//printf("Distancia detectada: %d cm\n", distancia_frontal); 
 
             if (pierna_derecha) {
                 if (distancia_frontal < distancia_frontal_min_der && distancia_frontal > 0) {
@@ -272,9 +272,11 @@ static void TareaCalentamientoArticular(void *pvParameter) {
                 LedOff(LED_1); 
                 LedOff(LED_2); 
                 LedOff(LED_3);
+                while (inicio && !medir) {
+                    vTaskDelay(CHEQUEO_TAREAS_CTRL_MS / portTICK_PERIOD_MS);
+                }
             }
         }
-        
         vTaskDelay(CHEQUEO_TAREAS_CTRL_MS / portTICK_PERIOD_MS); /* Tasa de chequeo de la tarea */
     }
 }
