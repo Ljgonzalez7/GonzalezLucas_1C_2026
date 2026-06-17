@@ -278,7 +278,6 @@ static void TareaReporte(void *pvParameter) {
                 UartSendString(UART_PC, " cm.\r\n");
 
                 if (asimetria > 2) {
-                    UartSendString(UART_PC, "    [ALERTA CLINICA]: Asimetria significativa \r\n");
                     UartSendString(UART_PC, "    [ALERTA CLINICA]: Asimetria significativa (mayor a 2 cm).\r\n");
                     UartSendString(UART_PC, "    Alto riesgo de lesion por compensacion.\r\n");
                 } else {
