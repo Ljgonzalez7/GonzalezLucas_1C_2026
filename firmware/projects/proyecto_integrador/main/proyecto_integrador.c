@@ -54,9 +54,9 @@
 #define CONFIG_BLINK_PERIOD_LEDS 500
 #define TIMER_SENSADO_US         40000     /* 40 ms (Frecuencia de muestreo 25 Hz) */
 #define PERIODO_TELEMETRIA_MS    50        /* Envío de datos a la PC cada 50 ms */
-#define DELAY_MONITOR            20        /* Delay entre textos monitor ms */
+#define DELAY_MONITOR            45        /* Delay entre textos monitor ms */
 #define CHEQUEO_TAREAS_CTRL_MS   300       /* Tasa de revisión para reportes/control */
-#define BAUD_RATE                250000    
+#define BAUD_RATE                115200    
 
 #define RANGO1 12
 #define RANGO2 5
@@ -276,6 +276,7 @@ static void TareaReporte(void *pvParameter) {
                 UartSendString(UART_PC, " -- Diferencia entre miembros: ");
                 UartSendString(UART_PC, (char*)UartItoa(asimetria, 10));
                 UartSendString(UART_PC, " cm.\r\n");
+                vTaskDelay(DELAY_MONITOR / portTICK_PERIOD_MS); 
 
                 if (asimetria > 2) {
                     UartSendString(UART_PC, "    [ALERTA CLINICA]: Asimetria significativa (mayor a 2 cm).\r\n");
@@ -350,13 +351,19 @@ static void TareaProcesarTeclas(void *pvParameter) {
                     }
                 }
             }
-            else if(tecla_recibida == 'p' || tecla_recibida == 'P') {
+           else if(tecla_recibida == 'p' || tecla_recibida == 'P') {
                 if (inicio) {
-                    pierna_derecha = !pierna_derecha; 
-                    if (pierna_derecha) {
-                        UartSendString(UART_PC, "-> Evaluando: PIERNA DERECHA\r\n");
+                    if (medir) {
+                        // 1. SI ESTÁ MIDIENDO: Bloqueamos el cambio y enviamos una advertencia clínica
+                        UartSendString(UART_PC, "ADVERTENCIA: Detenga la medicion (Tecla M) antes de cambiar de pierna.\r\n");
                     } else {
-                        UartSendString(UART_PC, "-> Evaluando: PIERNA IZQUIERDA\r\n");
+                        // 2. SI ESTÁ PAUSADO: Permitimos el cambio de miembro de forma segura
+                        pierna_derecha = !pierna_derecha; 
+                        if (pierna_derecha) {
+                            UartSendString(UART_PC, "-> Evaluando: PIERNA DERECHA\r\n");
+                        } else {
+                            UartSendString(UART_PC, "-> Evaluando: PIERNA IZQUIERDA\r\n");
+                        }
                     }
                 }
             }
@@ -390,7 +397,7 @@ void app_main(void){
     xTaskCreate(&TareaCalentamientoArticular, "CalentamientoArt", 2048, NULL, 4, &Calentamiento_task_handle);
     xTaskCreate(&TareaProcesarTeclas, "ProcesarTeclas", 3072, NULL, 4, NULL);
     xTaskCreate(&TareaTelemetriaUart, "Telemetria", 2048, NULL, 3, NULL);
-    xTaskCreate(&TareaReporte, "ReporteTask", 3072, NULL, 4, NULL); // Prioridad adecuada para que no sature
+    xTaskCreate(&TareaReporte, "ReporteTask", 3072, NULL, 5, NULL); // Prioridad adecuada para que no sature
     
     /* Interrupciones por switch */
     SwitchActivInt(SWITCH_1, switch1_interrupcion, NULL);
