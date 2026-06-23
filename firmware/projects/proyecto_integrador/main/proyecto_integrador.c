@@ -62,6 +62,8 @@
 #define RANGO2 5
 #define DIST_MIN_RESET 30
 
+#define MAX_PACIENTES 10
+
 /*==================[internal data definition]===============================*/
 volatile bool inicio = false;
 volatile bool medir = false;
@@ -73,6 +75,18 @@ uint16_t distancia_frontal = 0;
 uint16_t distancia_frontal_min_der = DIST_MIN_RESET; 
 uint16_t distancia_frontal_min_izq = DIST_MIN_RESET;
 uint16_t distancia_lateral = 0;
+int16_t asimetria = 0;
+
+typedef struct {
+    uint8_t id_paciente;
+    uint16_t min_derecha;
+    uint16_t min_izquierda;
+    uint16_t asimetria;
+} registro_test_t;
+
+registro_test_t historial_clinico[MAX_PACIENTES];
+
+uint8_t contador_pacientes = 0;
 
 // Handles de FreeRTOS
 TaskHandle_t SensorDistanciaFrontal_task_handle = NULL;
@@ -269,7 +283,7 @@ static void TareaReporte(void *pvParameter) {
 
             // 4. Análisis de Asimetría
             if (distancia_frontal_min_der != DIST_MIN_RESET && distancia_frontal_min_izq != DIST_MIN_RESET) {
-                int16_t asimetria = distancia_frontal_min_der - distancia_frontal_min_izq;
+                asimetria = distancia_frontal_min_der - distancia_frontal_min_izq;
                 if (asimetria < 0) asimetria = -asimetria;
 
                 UartSendString(UART_PC, "--------------------------------------------------\r\n");
@@ -291,6 +305,15 @@ static void TareaReporte(void *pvParameter) {
             UartSendString(UART_PC, "\r\n ==================================================\r\n");
             UartSendString(UART_PC, " Fin del reporte. Listo para una nueva evaluacion.\r\n");
             UartSendString(UART_PC, "==================================================\r\n\r\n");
+
+
+            if (contador_pacientes < MAX_PACIENTES) {
+                historial_clinico[contador_pacientes].id_paciente = contador_pacientes + 1;
+                historial_clinico[contador_pacientes].min_derecha = distancia_frontal_min_der;
+                historial_clinico[contador_pacientes].min_izquierda = distancia_frontal_min_izq;
+                historial_clinico[contador_pacientes].asimetria = asimetria;
+                contador_pacientes++;
+            }
 
             // Reseteamos las variables para la próxima prueba limpia
             distancia_frontal_min_der = DIST_MIN_RESET;
@@ -364,6 +387,36 @@ static void TareaProcesarTeclas(void *pvParameter) {
                         } else {
                             UartSendString(UART_PC, "-> Evaluando: PIERNA IZQUIERDA\r\n");
                         }
+                    }
+                }
+            }
+            else if(tecla_recibida == 'h' || tecla_recibida == 'H') {
+                if (inicio) {
+                    if (medir) {
+                        UartSendString(UART_PC, "ADVERTENCIA: Detenga la medicion antes de consultar el historial.\r\n");
+                    } else {
+                        UartSendString(UART_PC, "\r\n==================================================\r\n");
+                        UartSendString(UART_PC, "          HISTORIAL CLINICO DE EVALUACIONES       \r\n");
+                        UartSendString(UART_PC, "==================================================\r\n");
+                        vTaskDelay(DELAY_MONITOR / portTICK_PERIOD_MS);
+
+                        if (contador_pacientes == 0) {
+                            UartSendString(UART_PC, " No hay registros cargados en esta sesion.\r\n");
+                        } else {
+                            for (int i = 0; i < contador_pacientes; i++) {
+                                UartSendString(UART_PC, "\r\n Paciente #");
+                                UartSendString(UART_PC, (char*)UartItoa(historial_clinico[i].id_paciente, 10));
+                                UartSendString(UART_PC, " -> Der: ");
+                                UartSendString(UART_PC, (char*)UartItoa(historial_clinico[i].min_derecha, 10));
+                                UartSendString(UART_PC, " cm | Izq: ");
+                                UartSendString(UART_PC, (char*)UartItoa(historial_clinico[i].min_izquierda, 10));
+                                UartSendString(UART_PC, " cm | Asimetria: ");
+                                UartSendString(UART_PC, (char*)UartItoa(historial_clinico[i].asimetria, 10));
+                                UartSendString(UART_PC, " cm\r\n");
+                                vTaskDelay(DELAY_MONITOR / portTICK_PERIOD_MS); // Respiro de hardware por renglón
+                            }
+                        }
+                        UartSendString(UART_PC, "==================================================\r\n\r\n");
                     }
                 }
             }
