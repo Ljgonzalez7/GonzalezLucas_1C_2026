@@ -1,9 +1,10 @@
-/*! @mainpage Proyecto Integrador
+/*! @mainpage Proyecto Integrador - González Lucas
  *
  * @section genDesc General Description
  *
- * Proyecto integrador: software que permite optimizar el test de dorsiflexión de tobillo utilizando
- * sensores de distancia y sensor de compensación del valgo de rodilla. 
+ * Proyecto integrador: Sistema de sensado para evaluar movilidad articular en miembro inferior.
+ * Permite optimizar el test de dorsiflexión de tobillo utilizando sensores de distancia, pantalla LCD, 
+ * leds sincronizados, timers y comunicación UART. Ofrece un reporte del estudio y un registro histórico.
  *
  * <a href="https://drive.google.com/...">Operation Example</a>
  *
@@ -40,7 +41,7 @@
 #include <stdbool.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/queue.h"  // <-- Agregado para manejo seguro de colas
+#include "freertos/queue.h"  
 #include "gpio_mcu.h"
 #include "led.h"
 #include "switch.h"
@@ -51,32 +52,110 @@
 #include "analog_io_mcu.h"
 
 /*==================[macros and definitions]=================================*/
+/** @def CONFIG_BLINK_PERIOD_LEDS
+ * @brief Periodo de parpadeo de leds durante calentamiento (ms).
+ */
 #define CONFIG_BLINK_PERIOD_LEDS 500
-#define TIMER_SENSADO_US         40000     /* 40 ms (Frecuencia de muestreo 25 Hz) */
-#define PERIODO_TELEMETRIA_MS    50        /* Envío de datos a la PC cada 50 ms */
-#define DELAY_MONITOR            45        /* Delay entre textos monitor ms */
-#define CHEQUEO_TAREAS_CTRL_MS   300       /* Tasa de revisión para reportes/control */
+
+/** @def TIMER_SENSADO_US
+ * @brief Periodo de disparo del timer (40 ms implica frecuencia de muestreo 25 Hz).
+ */
+#define TIMER_SENSADO_US         40000     
+
+/** @def PERIODO_TELEMETRIA_MS
+* @brief Intervalo de envío de datos gráficos a la PC (ms).
+ */
+#define PERIODO_TELEMETRIA_MS    50 
+
+/** @def DELAY_MONITOR
+* @brief Retardo estructural entre cadenas de la UART para el buffer del ESP32-C6 (ms).
+ */
+#define DELAY_MONITOR            45      
+
+/** @def CHEQUEO_TAREAS_CTRL_MS
+* @brief Tasa de revisión para reportes/control de tareas (ms).
+ */
+#define CHEQUEO_TAREAS_CTRL_MS   300       
+
+/** @def BAUD_RATE
+ * @brief velocidad de transmisión de datos por segundo.
+ */
 #define BAUD_RATE                115200    
 
+/** @def RANGO1
+ * @brief Umbral superior para clasificación de distancia (cm).
+ */
 #define RANGO1 12
+
+/** @def RANGO2
+ * @brief Umbral inferior para clasificación de distancia (cm).
+ */
 #define RANGO2 5
+
+/** @def DIST_MIN_RESET
+ * @brief Valor inicial para la distancia mínima (cm).
+ */
 #define DIST_MIN_RESET 30
 
+/** @def MAX_PACIENTES
+ * @brief Número máximo de pacientes a registrar en la sesión.
+ */
 #define MAX_PACIENTES 10
 
 /*==================[internal data definition]===============================*/
+/** @var inicio 
+ * @brief Variable booleana filtro de iniciar o apagar el sistema.
+ */
 volatile bool inicio = false;
+
+/** @var medir 
+ * @brief Variable booleana filtro de medir o parar medición.
+ */
 volatile bool medir = false;
+
+/** @var reporte 
+ * @brief Variable booleana filtro de generar reporte.
+ */
 volatile bool reporte = false;
+
+/** @var calentando 
+ * @brief Variable booleana filtro acerca del estado de calentamiento.
+ */
 volatile bool calentando = false;
+
+/** @var pierna_derecha
+ * @brief Variable booleana filtro indicador acerca de la pierna que se está evaluando (true = derecha, false = izquierda).
+ */
 volatile bool pierna_derecha = true;
 
+/** @var distancia_frontal 
+ * @brief Variable que almacena la distancia frontal medida (inicial en 0 cm).
+ */
 uint16_t distancia_frontal = 0; 
+
+/** @var distancia_frontal_min_der
+ * @brief variable que almacena la distancia mínima frontal medida para la pierna derecha (inicial en 30 cm).
+ */
 uint16_t distancia_frontal_min_der = DIST_MIN_RESET; 
+
+/** @var distancia_frontal_min_izq
+ * @brief Variable que almacena la distancia mínima frontal medida para la pierna izquierda (inicial en 30 cm).
+ */
 uint16_t distancia_frontal_min_izq = DIST_MIN_RESET;
+
+/** @var distancia_lateral
+ * @brief Variable que almacena la distancia lateral medida (inicial en 0 cm).
+ */
 uint16_t distancia_lateral = 0;
+
+/** @var asimetria 
+ * @brief Variable de cálculo de déficit bilateral absoluto entre miembros (cm).
+ */
 int16_t asimetria = 0;
 
+/** @struct registro_test_t
+ * @brief Estructura de abstracción para persistencia local de los estudios en RAM.
+ */
 typedef struct {
     uint8_t id_paciente;
     uint16_t min_derecha;
@@ -84,9 +163,9 @@ typedef struct {
     uint16_t asimetria;
 } registro_test_t;
 
-registro_test_t historial_clinico[MAX_PACIENTES];
+registro_test_t historial_clinico[MAX_PACIENTES]; /**< Vector de estructuras de almacenamiento volátil */
 
-uint8_t contador_pacientes = 0;
+uint8_t contador_pacientes = 0; /**< Contador acumulativo de registros guardados */
 
 // Handles de FreeRTOS
 TaskHandle_t SensorDistanciaFrontal_task_handle = NULL;
@@ -94,6 +173,11 @@ TaskHandle_t Calentamiento_task_handle = NULL;
 QueueHandle_t cola_uart_teclas = NULL; // <-- Cola para comunicar la ISR de la UART de forma segura
 
 /*==================[internal functions declaration]=========================*/
+
+/** @fn void actualizarLeds(uint16_t dist_frontal)
+* @brief Función que cambia el estado de los leds según distancia medida.
+ * * @param dist_frontal valor de distancia medido en cm.
+ */
 void actualizarLeds(uint16_t dist_frontal) {
     if (dist_frontal > RANGO1) {
         LedOff(LED_1);
@@ -105,7 +189,7 @@ void actualizarLeds(uint16_t dist_frontal) {
         LedOn(LED_2); 
         LedOff(LED_3);
     } 
-    else if (dist_frontal <= RANGO2 && dist_frontal > 0) { // <-- Protección ante lecturas en 0
+    else if (dist_frontal <= RANGO2 && dist_frontal > 0) { 
         LedOn(LED_1); 
         LedOff(LED_2); 
         LedOff(LED_3);
@@ -117,6 +201,9 @@ void actualizarLeds(uint16_t dist_frontal) {
     }
 }
 
+/** @fn static void TareaSensorDistanciaFrontal(void *pvParameter)
+ * @brief Tarea que integra el programa de sensado, interacción y mostrado por pantalla.
+ */
 static void TareaSensorDistanciaFrontal(void *pvParameter) {    
     while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
@@ -147,11 +234,13 @@ static void TareaSensorDistanciaFrontal(void *pvParameter) {
     }
 }
 
+/** @fn static void TareaCalentamientoArticular(void *pvParameter)
+ * @brief Tarea que controla el calentamiento articular por un minuto.
+ */
 static void TareaCalentamientoArticular(void *pvParameter) {    
-    static bool calentamiento_listo = false; // <-- Bandera local para saber si ya se hizo en este ciclo
+    static bool calentamiento_listo = false; 
 
     while (1) {
-        /* Si se encendió el sistema, no se midió todavía y no se hizo el calentamiento */
         if (inicio && !medir && !calentamiento_listo) {
             printf("--- ARRANCANDO MINUTO DE CALENTAMIENTO ---\n");
             UartSendString(UART_PC, "Estado: Calentamiento en curso...\r\n");
@@ -176,12 +265,11 @@ static void TareaCalentamientoArticular(void *pvParameter) {
                 LedOff(LED_2); 
                 LedOff(LED_3);
                 
-                calentando = false;       // El calentamiento físico terminó
-                calentamiento_listo = true; // Ya se completó el minuto para esta sesión
+                calentando = false;       
+                calentamiento_listo = true;
             }
         }
         
-        /* Si el usuario apaga el sistema con 'O', reseteamos todo para el próximo paciente */
         if (!inicio) {
             calentando = false;
             calentamiento_listo = false; 
@@ -191,6 +279,9 @@ static void TareaCalentamientoArticular(void *pvParameter) {
     }
 }
 
+/**
+ * @brief Función invocada en la interrupción del timer.
+ */
 void TimerInterrupcion(void *param){
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     // Notificamos y forzamos cambio de contexto inmediato si el scheduler lo requiere
@@ -198,7 +289,9 @@ void TimerInterrupcion(void *param){
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
-// ISRs de los Switches físicos
+/**
+ * @brief Función invocada en la interrupción por switch1.
+ */
 void switch1_interrupcion (void *param){
     inicio = !inicio;   
     calentando = false;
@@ -209,19 +302,24 @@ void switch1_interrupcion (void *param){
     }
 }
 
+/**
+ * @brief Función invocada en la interrupción por switch2.
+ */
 void switch2_interrupcion (void *param){
     if (inicio && !calentando) {
         medir = !medir;
     }
 }
 
+/** @fn static void TareaTelemetriaUart(void *pvParameter)
+ * @brief Tarea que envia datos de telemetria por UART.
+ */
 void TareaTelemetriaUart(void *pvParameter) {
     uint16_t distancia_a_enviar = 0;
 
     while(1){
         if (inicio && medir && !calentando && !reporte) { 
             
-            // Si la distancia medida supera el límite o da un error (0), la clavamos en el máximo
             if (distancia_frontal > DIST_MIN_RESET|| distancia_frontal == 0) {
                 distancia_a_enviar = DIST_MIN_RESET;
             } else {
@@ -236,16 +334,17 @@ void TareaTelemetriaUart(void *pvParameter) {
     }
 }
 
+/** @fn static void TareaReporte(void *pvParameter)
+ * @brief Tarea que controla el reporte del estudio.
+ */
 static void TareaReporte(void *pvParameter) {    
     while (1) {
         if (reporte && !medir) {
-            // 1. Encabezado
             UartSendString(UART_PC, "\r\n==================================================\r\n");
             UartSendString(UART_PC, "        INFORME CLINICO - BIOMECANICA WBLT        \r\n");
             UartSendString(UART_PC, "\r\n==================================================\r\n");
-            vTaskDelay(DELAY_MONITOR / portTICK_PERIOD_MS); // <-- Un respiro de 20ms para vaciar el buffer de hardware
+            vTaskDelay(DELAY_MONITOR / portTICK_PERIOD_MS); 
 
-            // 2. Pierna Derecha
             UartSendString(UART_PC, "\r\n -- Maxima Dorsiflexion PIERNA DERECHA: ");
             if (distancia_frontal_min_der == DIST_MIN_RESET) {
                 UartSendString(UART_PC, "No se registraron mediciones validas.\r\n");
@@ -261,9 +360,8 @@ static void TareaReporte(void *pvParameter) {
                     UartSendString(UART_PC, "    [EVALUACION]: Movilidad ACORTADA (Restriccion severa).\r\n");
                 }
             }
-            vTaskDelay(DELAY_MONITOR / portTICK_PERIOD_MS); // <-- Otro respiro mecánico para la UART
+            vTaskDelay(DELAY_MONITOR / portTICK_PERIOD_MS); 
 
-            // 3. Pierna Izquierda
             UartSendString(UART_PC, " -- Maxima Dorsiflexion PIERNA IZQUIERDA: ");
             if (distancia_frontal_min_izq == DIST_MIN_RESET) {
                 UartSendString(UART_PC, "No se registraron mediciones validas.\r\n");
@@ -281,7 +379,7 @@ static void TareaReporte(void *pvParameter) {
             }
             vTaskDelay(DELAY_MONITOR / portTICK_PERIOD_MS); 
 
-            // 4. Análisis de Asimetría
+    
             if (distancia_frontal_min_der != DIST_MIN_RESET && distancia_frontal_min_izq != DIST_MIN_RESET) {
                 asimetria = distancia_frontal_min_der - distancia_frontal_min_izq;
                 if (asimetria < 0) asimetria = -asimetria;
@@ -301,7 +399,6 @@ static void TareaReporte(void *pvParameter) {
             }
             vTaskDelay(DELAY_MONITOR / portTICK_PERIOD_MS); 
 
-            // 5. Cierre
             UartSendString(UART_PC, "\r\n ==================================================\r\n");
             UartSendString(UART_PC, " Fin del reporte. Listo para una nueva evaluacion.\r\n");
             UartSendString(UART_PC, "==================================================\r\n\r\n");
@@ -315,7 +412,6 @@ static void TareaReporte(void *pvParameter) {
                 contador_pacientes++;
             }
 
-            // Reseteamos las variables para la próxima prueba limpia
             distancia_frontal_min_der = DIST_MIN_RESET;
             distancia_frontal_min_izq = DIST_MIN_RESET; 
             reporte = false; 
@@ -325,21 +421,23 @@ static void TareaReporte(void *pvParameter) {
     }
 }
 
-// ESTA FUNCIÓN ES UNA ISR. ¡Debe ser ultra rápida y no puede imprimir strings!
-void Funcion_manejo_teclas(){
+/** @fn void Funcion_manejo_teclas(void)
+ * @brief ISR de la UART que lee bytes entrantes del teclado y los deposita en la cola de FreeRTOS.
+ */void Funcion_manejo_teclas(){
     uint8_t tecla;
     UartReadByte(UART_PC, &tecla);
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    // Insertamos el byte leído en la cola de forma segura desde la ISR
     xQueueSendFromISR(cola_uart_teclas, &tecla, &xHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
-// Nueva Tarea Asincrónica dedicada a procesar lo que llega por la cola de la UART
-static void TareaProcesarTeclas(void *pvParameter) {
+/** @fn static void TareaProcesarTeclas(void *pvParameter)
+ * @brief Consumidor asincrónico de la cola de caracteres; ejecuta las máquinas de estado lógicas.
+ * @param pvParameter Puntero a parámetros de FreeRTOS (no utilizado).
+ */
+ static void TareaProcesarTeclas(void *pvParameter) {
     uint8_t tecla_recibida;
     while(1) {
-        // Se queda bloqueada eficientemente consumiendo 0% CPU hasta que entre un carácter
         if (xQueueReceive(cola_uart_teclas, &tecla_recibida, portMAX_DELAY) == pdTRUE) {
             
             if(tecla_recibida == 'o' || tecla_recibida == 'O') {
@@ -355,7 +453,7 @@ static void TareaProcesarTeclas(void *pvParameter) {
                 }
             }
             else if(tecla_recibida == 'm' || tecla_recibida == 'M') {
-                if (inicio) { // <-- Le sacamos el "&& !calentando"
+                if (inicio) { 
                     medir = !medir;
                     if(medir) {
                         UartSendString(UART_PC, "Medicion: INICIADA.\r\n");
@@ -367,20 +465,17 @@ static void TareaProcesarTeclas(void *pvParameter) {
             else if(tecla_recibida == 'r' || tecla_recibida == 'R') {
                 if (inicio) {
                     if (medir) {
-                        // Si intenta sacar el reporte en vivo, le avisamos por consola
                         UartSendString(UART_PC, "ADVERTENCIA: Detenga la medicion (Tecla M) antes de generar el reporte.\r\n");
                     } else {
-                        reporte = true; // Si la medición estaba pausada, habilita el reporte
+                        reporte = true; 
                     }
                 }
             }
            else if(tecla_recibida == 'p' || tecla_recibida == 'P') {
                 if (inicio) {
                     if (medir) {
-                        // 1. SI ESTÁ MIDIENDO: Bloqueamos el cambio y enviamos una advertencia clínica
                         UartSendString(UART_PC, "ADVERTENCIA: Detenga la medicion (Tecla M) antes de cambiar de pierna.\r\n");
                     } else {
-                        // 2. SI ESTÁ PAUSADO: Permitimos el cambio de miembro de forma segura
                         pierna_derecha = !pierna_derecha; 
                         if (pierna_derecha) {
                             UartSendString(UART_PC, "-> Evaluando: PIERNA DERECHA\r\n");
@@ -413,7 +508,7 @@ static void TareaProcesarTeclas(void *pvParameter) {
                                 UartSendString(UART_PC, " cm | Asimetria: ");
                                 UartSendString(UART_PC, (char*)UartItoa(historial_clinico[i].asimetria, 10));
                                 UartSendString(UART_PC, " cm\r\n");
-                                vTaskDelay(DELAY_MONITOR / portTICK_PERIOD_MS); // Respiro de hardware por renglón
+                                vTaskDelay(DELAY_MONITOR / portTICK_PERIOD_MS);
                             }
                         }
                         UartSendString(UART_PC, "==================================================\r\n\r\n");
@@ -427,15 +522,17 @@ static void TareaProcesarTeclas(void *pvParameter) {
 /*==================[external functions definition]==========================*/
 void app_main(void){
     printf("Inicializacion\n");
+
+    /* Inicialización de periféricos */
     LedsInit();
     SwitchesInit();
     LcdItsE0803Init();
     HcSr04Init(GPIO_3, GPIO_2); 
 
-    // Inicializamos la cola de FreeRTOS con capacidad para 10 pulsaciones
+    /* Inicialización del buffer de comunicación entre hilos */
     cola_uart_teclas = xQueueCreate(10, sizeof(uint8_t));
 
-    /* Inicialización de timers */
+    /* Configuración e inicialización de timer */
     timer_config_t timer_1 = {
         .timer = TIMER_A, 
         .period = TIMER_SENSADO_US, 
@@ -445,12 +542,13 @@ void app_main(void){
     TimerInit(&timer_1);
 
     printf("Ejecucion de programa\n");
-    // Jerarquía de prioridades balanceada correctamente
+    
+    /* Creación de tareas */
     xTaskCreate(&TareaSensorDistanciaFrontal, "SensorDist", 2048, NULL, 5, &SensorDistanciaFrontal_task_handle);
     xTaskCreate(&TareaCalentamientoArticular, "CalentamientoArt", 2048, NULL, 4, &Calentamiento_task_handle);
     xTaskCreate(&TareaProcesarTeclas, "ProcesarTeclas", 3072, NULL, 4, NULL);
     xTaskCreate(&TareaTelemetriaUart, "Telemetria", 2048, NULL, 3, NULL);
-    xTaskCreate(&TareaReporte, "ReporteTask", 3072, NULL, 5, NULL); // Prioridad adecuada para que no sature
+    xTaskCreate(&TareaReporte, "ReporteTask", 3072, NULL, 5, NULL); 
     
     /* Interrupciones por switch */
     SwitchActivInt(SWITCH_1, switch1_interrupcion, NULL);
@@ -459,6 +557,7 @@ void app_main(void){
     /* Inicialización del conteo de timers */
     TimerStart(timer_1.timer);
 
+    /* Configuracion e inicialización de la UART */
     static serial_config_t config_uart_entrada = { 
         .port = UART_PC,    
         .baud_rate = BAUD_RATE,     
